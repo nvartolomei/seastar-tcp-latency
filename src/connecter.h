@@ -18,4 +18,6 @@ public:
 private:
     ss::logger* _logger;
     ss::socket_address _remote_addr;
+
+    int64_t _seq_num = 0;
 };

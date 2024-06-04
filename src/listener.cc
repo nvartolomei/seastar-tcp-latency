@@ -1,5 +1,6 @@
 #include "listener.h"
 
+#include "seastar/net/api.hh"
 #include "ss.h"
 
 #include <seastar/core/abort_source.hh>
@@ -9,7 +10,7 @@
 #include <stdexcept>
 
 ss::future<> listener::run(ss::abort_source& as) {
-    _listener = ss::listen(_addr);
+    _listener = ss::listen(_addr, ss::listen_options{.reuse_address = true});
 
     auto sub = as.subscribe([this]() noexcept { _listener.abort_accept(); });
 
@@ -24,10 +25,42 @@ ss::future<> listener::run(ss::abort_source& as) {
                 throw;
             }
         }
-        auto addr = conn.connection.remote_address();
 
-        _logger->info("Accepted connection from {}", addr);
+        std::ignore = handle_connection(as, std::move(conn.connection));
     }
 
     co_return;
+}
+
+ss::future<>
+listener::handle_connection(ss::abort_source& as, ss::connected_socket socket) {
+    auto remote_addr = socket.remote_address();
+    _logger->info("Accepted connection from {}", remote_addr);
+
+    auto gate_holder = _gate.hold();
+
+    auto socket_istream = socket.input();
+    auto socket_ostream = socket.output();
+
+    while (!as.abort_requested()) {
+        auto buf = co_await socket_istream.read_exactly(sizeof(int64_t));
+
+        if (buf.size() != sizeof(int64_t)) {
+            if (as.abort_requested() || buf.empty()) {
+                break;
+            } else {
+                throw std::runtime_error(
+                  fmt::format("Partial read {}", buf.size()));
+            }
+        }
+
+        auto seq_num = ss::read_be<int64_t>(buf.get());
+
+        auto out_buf = ss::temporary_buffer<char>(sizeof(int64_t));
+        ss::write_be(out_buf.get_write(), seq_num);
+        co_await socket_ostream.write(out_buf.share());
+        co_await socket_ostream.flush();
+    }
+
+    _logger->info("Closed connect from {}", remote_addr);
 }

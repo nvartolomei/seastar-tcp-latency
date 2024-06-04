@@ -50,7 +50,9 @@ int main(int argc, char** argv) {
               &logger, ss::ipv4_addr(opts["listen"].as<ss::sstring>()));
 
             return ss::do_with(std::move(l), [&as](auto& l) {
-                return l.run(as).then([] { return 0; });
+                return l.run(as).then([] { return 0; }).finally([&l] {
+                    return l.close();
+                });
             });
         } else if (opts.count("connect")) {
             logger.info(
@@ -64,7 +66,7 @@ int main(int argc, char** argv) {
                 return c.run(as).then([] { return 0; });
             });
         } else {
-            __builtin_unreachable();
+            throw std::runtime_error("Unreachable branch");
         }
 
         return ss::make_ready_future<int>(0);
