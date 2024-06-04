@@ -7,16 +7,15 @@
 #include <seastar/net/tcp.hh>
 #include <seastar/util/log.hh>
 
-class listener {
+class connecter {
 public:
-    listener(ss::logger* logger, ss::socket_address addr)
+    connecter(ss::logger* logger, ss::socket_address remote_addr)
       : _logger(logger)
-      , _addr(std::move(addr)) {}
+      , _remote_addr(std::move(remote_addr)) {}
 
     ss::future<> run(ss::abort_source& as);
 
 private:
     ss::logger* _logger;
-    ss::socket_address _addr;
-    ss::server_socket _listener;
+    ss::socket_address _remote_addr;
 };

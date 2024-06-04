@@ -1,3 +1,4 @@
+#include "connecter.h"
 #include "listener.h"
 #include "ss.h"
 
@@ -51,6 +52,19 @@ int main(int argc, char** argv) {
             return ss::do_with(std::move(l), [&as](auto& l) {
                 return l.run(as).then([] { return 0; });
             });
+        } else if (opts.count("connect")) {
+            logger.info(
+              "Starting ss-tcp-latency in connect mode to {}",
+              opts["connect"].as<ss::sstring>());
+
+            auto c = connecter(
+              &logger, ss::ipv4_addr(opts["connect"].as<ss::sstring>()));
+
+            return ss::do_with(std::move(c), [&as](auto& c) {
+                return c.run(as).then([] { return 0; });
+            });
+        } else {
+            __builtin_unreachable();
         }
 
         return ss::make_ready_future<int>(0);
