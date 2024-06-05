@@ -12,5 +12,6 @@ endif()
 
 set(Boost_USE_STATIC_LIBS ON)
 
+add_subdirectory(3rdparty/fmt)
 add_subdirectory(3rdparty/seastar)
 add_subdirectory(src)
