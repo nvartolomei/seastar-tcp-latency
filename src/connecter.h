@@ -7,17 +7,24 @@
 #include <seastar/net/tcp.hh>
 #include <seastar/util/log.hh>
 
+#include <chrono>
+
 class connecter {
 public:
-    connecter(ss::logger* logger, ss::socket_address remote_addr)
+    connecter(
+      ss::logger* logger,
+      ss::socket_address remote_addr,
+      std::chrono::microseconds send_interval)
       : _logger(logger)
-      , _remote_addr(std::move(remote_addr)) {}
+      , _remote_addr(std::move(remote_addr))
+      , _send_interval(send_interval) {}
 
     ss::future<> run(ss::abort_source& as);
 
 private:
     ss::logger* _logger;
     ss::socket_address _remote_addr;
+    std::chrono::microseconds _send_interval;
 
     int64_t _seq_num = 0;
 };

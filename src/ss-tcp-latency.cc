@@ -9,6 +9,8 @@
 
 #include <boost/program_options.hpp>
 
+#include <chrono>
+
 namespace po = boost::program_options;
 
 static ss::logger logger("app");
@@ -22,6 +24,11 @@ int main(int argc, char** argv) {
 
     app.add_options()(
       "connect", po::value<ss::sstring>(), "target ip:port to connect to");
+
+    app.add_options()(
+      "send-interval",
+      po::value<double>()->default_value(0.05),
+      "seconds between sending messages (default: 0.05)");
 
     auto as = ss::abort_source();
 
@@ -60,7 +67,10 @@ int main(int argc, char** argv) {
               opts["connect"].as<ss::sstring>());
 
             auto c = connecter(
-              &logger, ss::ipv4_addr(opts["connect"].as<ss::sstring>()));
+              &logger,
+              ss::ipv4_addr(opts["connect"].as<ss::sstring>()),
+              std::chrono::microseconds(static_cast<int64_t>(
+                opts["send-interval"].as<double>() * 1e6)));
 
             return ss::do_with(std::move(c), [&as](auto& c) {
                 return c.run(as).then([] { return 0; });

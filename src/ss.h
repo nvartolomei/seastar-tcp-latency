@@ -1,5 +1,7 @@
 #pragma once
 
-#include <seastar/core/seastar.hh>
+// IWYU pragma: always_keep
+
+namespace seastar {} // namespace seastar
 
 namespace ss = seastar;

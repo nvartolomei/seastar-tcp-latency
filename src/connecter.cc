@@ -1,11 +1,12 @@
 #include "connecter.h"
 
-#include "seastar/core/sleep.hh"
-#include "seastar/core/timer.hh"
 #include "ss.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/byteorder.hh>
+#include <seastar/core/seastar.hh>
+#include <seastar/core/sleep.hh>
+#include <seastar/core/timer.hh>
 #include <seastar/net/tcp.hh>
 
 using namespace std::chrono_literals;
@@ -15,6 +16,7 @@ ss::future<> connecter::run(ss::abort_source& as) {
     socket.set_nodelay(true);
     _logger->info("Connected to {}", _remote_addr);
 
+    auto socket_istream = socket.input();
     auto socket_ostream = socket.output();
 
     auto buf = ss::temporary_buffer<char>(sizeof(_seq_num));
@@ -27,9 +29,9 @@ ss::future<> connecter::run(ss::abort_source& as) {
         // TODO(nv): By default this call doesn't flush but enqueues the
         // output_stream to be flushed by the flush poller. Experiment with
         // disabling the flush poller.
-        co_await socket_ostream.flush();
+        auto flush_fut = socket_ostream.flush();
 
-        auto in_buf = co_await socket.input().read_exactly(sizeof(_seq_num));
+        auto in_buf = co_await socket_istream.read_exactly(sizeof(_seq_num));
         if (in_buf.size() != sizeof(_seq_num)) {
             throw std::runtime_error("Unexpected EOF");
         }
@@ -49,7 +51,9 @@ ss::future<> connecter::run(ss::abort_source& as) {
 
         _seq_num += 1;
 
-        co_await ss::sleep(50ms);
+        if (latency < _send_interval) {
+            co_await ss::sleep(_send_interval - latency);
+        }
     }
 
     co_return;
