@@ -10,5 +10,7 @@ if(CCACHE_FOUND)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE_FOUND})
 endif()
 
+set(Boost_USE_STATIC_LIBS ON)
+
 add_subdirectory(3rdparty/seastar)
 add_subdirectory(src)
