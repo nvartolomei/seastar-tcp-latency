@@ -14,6 +14,7 @@
 namespace po = boost::program_options;
 
 static ss::logger logger("app");
+static auto as = ss::abort_source();
 
 int main(int argc, char** argv) {
     ss::app_template app;
@@ -30,10 +31,14 @@ int main(int argc, char** argv) {
       po::value<double>()->default_value(0.05),
       "seconds between sending messages (default: 0.05)");
 
-    auto as = ss::abort_source();
+    app.add_options()(
+      "send-bytes",
+      po::value<uint64_t>()->default_value(0),
+      "number of bytes to send in each message (on top of the 16 bytes "
+      "header)");
 
     return app.run(argc, argv, [&] {
-        seastar::engine().at_exit([&as] {
+        seastar::engine().at_exit([] {
             logger.info("ss-tcp-latency is shutting down");
             as.request_abort();
 
@@ -56,7 +61,7 @@ int main(int argc, char** argv) {
             auto l = listener(
               &logger, ss::ipv4_addr(opts["listen"].as<ss::sstring>()));
 
-            return ss::do_with(std::move(l), [&as](auto& l) {
+            return ss::do_with(std::move(l), [](auto& l) {
                 return l.run(as).then([] { return 0; }).finally([&l] {
                     return l.close();
                 });
@@ -70,9 +75,10 @@ int main(int argc, char** argv) {
               &logger,
               ss::ipv4_addr(opts["connect"].as<ss::sstring>()),
               std::chrono::microseconds(static_cast<int64_t>(
-                opts["send-interval"].as<double>() * 1e6)));
+                opts["send-interval"].as<double>() * 1e6)),
+                opts["send-bytes"].as<uint64_t>());
 
-            return ss::do_with(std::move(c), [&as](auto& c) {
+            return ss::do_with(std::move(c), [](auto& c) {
                 return c.run(as).then([] { return 0; });
             });
         } else {

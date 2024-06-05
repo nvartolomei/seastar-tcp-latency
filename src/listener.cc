@@ -44,22 +44,23 @@ listener::handle_connection(ss::abort_source& as, ss::connected_socket socket) {
     auto socket_ostream = socket.output();
 
     while (!as.abort_requested()) {
-        auto buf = co_await socket_istream.read_exactly(sizeof(int64_t));
+        auto header_buf = co_await socket_istream.read_exactly(
+          2 * sizeof(int64_t));
 
-        if (buf.size() != sizeof(int64_t)) {
-            if (as.abort_requested() || buf.empty()) {
+        if (header_buf.size() != 2 * sizeof(int64_t)) {
+            if (as.abort_requested() || header_buf.empty()) {
                 break;
             } else {
                 throw std::runtime_error(
-                  fmt::format("Partial read {}", buf.size()));
+                  fmt::format("Partial read {}", header_buf.size()));
             }
         }
 
-        auto seq_num = ss::read_be<int64_t>(buf.get());
+        auto payload_len = ss::read_be<int64_t>(
+          header_buf.get() + sizeof(int64_t));
+        co_await socket_istream.read_exactly(payload_len);
 
-        auto out_buf = ss::temporary_buffer<char>(sizeof(int64_t));
-        ss::write_be(out_buf.get_write(), seq_num);
-        co_await socket_ostream.write(out_buf.share());
+        co_await socket_ostream.write(header_buf.share(0, sizeof(int64_t)));
         co_await socket_ostream.flush();
     }
 

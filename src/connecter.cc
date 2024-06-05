@@ -19,12 +19,24 @@ ss::future<> connecter::run(ss::abort_source& as) {
     auto socket_istream = socket.input();
     auto socket_ostream = socket.output();
 
-    auto buf = ss::temporary_buffer<char>(sizeof(_seq_num));
+    auto header_buf = ss::temporary_buffer<char>(
+      sizeof(_seq_num) + sizeof(_send_bytes));
+    auto payload = ss::temporary_buffer<char>(_send_bytes);
+    auto rnd = std::mt19937(std::random_device()());
+    auto dist = std::uniform_int_distribution<int>(
+      0, std::numeric_limits<char>::max());
+    std::generate(
+      payload.get_write(), payload.get_write() + payload.size(), [&dist, &rnd] {
+          return dist(rnd);
+      });
+
     while (!as.abort_requested()) {
         auto start = ss::steady_clock_type::now();
 
-        ss::write_be(buf.get_write(), _seq_num);
-        co_await socket_ostream.write(buf.share());
+        ss::write_be(header_buf.get_write(), _seq_num);
+        ss::write_be(header_buf.get_write() + sizeof(_seq_num), _send_bytes);
+        co_await socket_ostream.write(header_buf.share());
+        co_await socket_ostream.write(payload.share());
 
         // TODO(nv): By default this call doesn't flush but enqueues the
         // output_stream to be flushed by the flush poller. Experiment with
