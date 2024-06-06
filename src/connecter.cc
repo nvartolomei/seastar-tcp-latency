@@ -11,6 +11,24 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+static constexpr size_t warmup_iters = 1000;
+
+void print_lats(const accumulator_type& lats) {
+    fmt::print("Latencies:\n");
+    fmt::print("  min: {:.4f}μs\n", boost::accumulators::min(lats));
+    fmt::print("  mean: {:.4f}μs\n", boost::accumulators::mean(lats));
+    fmt::print("  max: {:.4f}μs\n", boost::accumulators::max(lats));
+    for (auto q : quantiles) {
+        fmt::print(
+          "  {}th percentile: {:.4f}μs\n",
+          q * 100,
+          boost::accumulators::extended_p_square_quantile(
+            lats, boost::accumulators::quantile_probability = q));
+    }
+}
+} // namespace
+
 ss::future<> connecter::run(ss::abort_source& as) {
     auto socket = co_await ss::connect(_remote_addr);
     socket.set_nodelay(true);
@@ -30,6 +48,10 @@ ss::future<> connecter::run(ss::abort_source& as) {
           return dist(rnd);
       });
 
+    _last_lats_print = ss::steady_clock_type::now();
+
+    size_t iter_num = 0;
+    _logger->info("Starting warmup");
     while (!as.abort_requested()) {
         auto start = ss::steady_clock_type::now();
 
@@ -56,10 +78,26 @@ ss::future<> connecter::run(ss::abort_source& as) {
               + std::to_string(in_seq_num));
         }
 
+        if (_seq_num < warmup_iters) {
+            _seq_num += 1;
+            continue;
+        } else if (_seq_num == warmup_iters) {
+            _logger->info("Warmup complete");
+        }
+
         auto end = ss::steady_clock_type::now();
         auto latency = end - start;
 
-        _logger->info("Latency: {}us", latency / 1us);
+        auto latency_us = std::chrono::duration_cast<std::chrono::microseconds>(
+          latency);
+
+        _latencies(latency_us.count());
+
+        // Print summary.
+        if (end - _last_lats_print > 1s) {
+            print_lats(_latencies);
+            _last_lats_print = end;
+        }
 
         _seq_num += 1;
 
@@ -67,6 +105,8 @@ ss::future<> connecter::run(ss::abort_source& as) {
             co_await ss::sleep(_send_interval - latency);
         }
     }
+
+    print_lats(_latencies);
 
     co_return;
 }
