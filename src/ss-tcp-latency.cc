@@ -1,5 +1,6 @@
 #include "connecter.h"
 #include "listener.h"
+#include "seastar/core/loop.hh"
 #include "ss.h"
 
 #include <seastar/core/app-template.hh>
@@ -44,6 +45,22 @@ int main(int argc, char** argv) {
 
             return ss::now();
         });
+
+        // CPU/reactor ballast.
+        //
+        // std::ignore = ss::now().then([] {
+        //     size_t acc = 0;
+        //     return ss::repeat([&acc] {
+        //                acc += 1;
+        //                return ss::maybe_yield().then(
+        //                  [] { return ss::stop_iteration::no; });
+        //            })
+        //       .finally([acc] {
+        //           fmt::print("acc: {}\n", acc);
+
+        //           return ss::now();
+        //       });
+        // });
 
         auto& opts = app.configuration();
 
